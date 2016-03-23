@@ -1,0 +1,10 @@
+[
+    {
+      "name": "gmail",
+      "host": "imap.gmail.com",
+      "userid": "user@gmail.com",
+      "password": "astrongpassword",
+      "inbox": "\"[Gmail]/All Mail\"",
+      "command": "offlineimap -u ttyui -o -a gmail && notmuch new && notify-send -t 2000 'Mail retrieved for account gmail'"
+    }
+]
