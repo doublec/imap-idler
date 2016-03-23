@@ -6,6 +6,7 @@ use "collections"
 use "time"
 use "lib:c"
 use "signals"
+use "bureaucracy"
 
 primitive IMAPCAPABILITY
 primitive IMAPLOGIN
@@ -19,7 +20,10 @@ type Command is (IMAPCAPABILITY | IMAPLOGIN | IMAPSELECT | IMAPIDLE | IMAPLIST |
 actor Main
   new create(env:Env) =>
     let timers = Timers
+    let custodian = Custodian
     let system = System.create(timers)
+    custodian(system)
+
     let filename = try env.args(1) else "idle.json" end
     let contents =
       try
@@ -28,12 +32,14 @@ actor Main
       else
         ""
       end
+
     env.out.print("Reading " + filename)
     let json: JsonDoc = JsonDoc
     try
       env.out.print("Parsing " + filename)
       json.parse(contents)
       env.out.print("Parsed " + filename)
+
       let idlers = recover iso Array[Idler] end
       let config = json.data as JsonArray
       for entry in config.data.values() do
@@ -46,23 +52,21 @@ actor Main
         let command = imap("command") as String
         let idler = Idler(env, system, timers, name, host, userid, password, inbox, command)
         idler.connect()
+        custodian(idler)
         idlers.push(idler)
         env.out.print("Started Idler for " + name)
       end
-      let idlers_copy = recover val
-                          consume idlers
-                        end
       // SIGQUIT (Ctrl+\) is used to force a fetch of mail
-      SignalHandler(recover FetchMailHandler(idlers_copy) end, Sig.quit())
+      SignalHandler(recover FetchMailHandler(consume idlers) end, Sig.quit())
 
       // SIGINT (Ctrl+C) is used for graceful exit
-      SignalHandler(recover QuitHandler(idlers_copy, system) end, Sig.int())
+      SignalHandler(recover QuitHandler(custodian) end, Sig.int())
     end
 
 class FetchMailHandler is SignalNotify
-  let _idlers:Array[Idler] val
+  let _idlers:Array[Idler]
 
-  new create(idlers:Array[Idler] val) =>
+  new create(idlers:Array[Idler]) =>
     _idlers = idlers
 
   fun ref apply(count: U32): Bool =>
@@ -72,20 +76,14 @@ class FetchMailHandler is SignalNotify
     true
 
 class QuitHandler is SignalNotify
-  let _idlers:Array[Idler] val
-  let _system:System
+  let _custodian:Custodian
 
-  new create(idlers:Array[Idler] val, system:System) =>
-    _idlers = idlers
-    _system = system
+  new create(custodian:Custodian) =>
+    _custodian = custodian
 
   fun ref apply(count: U32): Bool =>
-    for idler in _idlers.values() do
-      idler.force_quit()
-    end
-    _system.dispose()
+    _custodian.dispose()
     false
-
 
 class ResponseBuilder is TCPConnectionNotify
   let _buffer:Buffer = Buffer
@@ -156,7 +154,7 @@ actor WaitForIdle is Action
                           _idler.stop_idling()
                           false
                         fun ref cancel(timer:Timer) => None
-                      end, 1_000_000_000 * 60 * 15, 0) // 15 Minute timeout
+                      end, 1_000_000_000 * 60 * 5, 0) // 5 Minute timeout
     _timer = timer
     timers(consume timer)
  
@@ -318,8 +316,8 @@ actor Idler
     log("Forcing fetch of mail")
     _system.run(_command)
 
-  be force_quit() =>
-    log("Forcing quit")
+  be dispose() =>
+    log("disposing")
     try
         (_conn as TCPConnection).dispose()
     end
