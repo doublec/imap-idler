@@ -27,7 +27,7 @@ actor Main
     let filename = try env.args(1) else "idle.json" end
     let contents =
       try
-        let file = File.open(FilePath(env.root, filename))
+        let file = File.open(FilePath(env.root as AmbientAuth, filename))
         file.read_string(file.size())
       else
         ""
@@ -229,7 +229,7 @@ actor Idler
       let ctx = SSLContext.set_client_verify(false)
       let ssl = ctx.client(_server)
 
-      _conn = TCPConnection(SSLConnection(ResponseBuilder(_env, this), consume ssl), _server, "993".string())
+      _conn = TCPConnection(_env.root as AmbientAuth, SSLConnection(ResponseBuilder(_env, this), consume ssl), _server, "993".string())
     else
       log("failed to connect")
     end
