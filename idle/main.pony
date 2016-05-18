@@ -86,7 +86,7 @@ class QuitHandler is SignalNotify
     false
 
 class ResponseBuilder is TCPConnectionNotify
-  let _buffer:Buffer = Buffer
+  let _buffer:ReadBuffer = ReadBuffer
   let _idler:Idler
   let _env:Env
 
