@@ -226,7 +226,8 @@ actor Idler
 
   be connect() =>
     try
-      let ctx = SSLContext.set_client_verify(false)
+      // Set ciphers and TLS to allow weaker ciphers to handle various configured IMAP servers that require it
+      let ctx = SSLContext.set_client_verify(false).set_ciphers("ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH").allow_tls_v1(true).allow_tls_v1_1(true)
       let ssl = ctx.client(_server)
 
       _conn = TCPConnection(_env.root as AmbientAuth, SSLConnection(ResponseBuilder(_env, this), consume ssl), _server, "993".string())
