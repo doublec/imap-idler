@@ -23,12 +23,19 @@ actor Main
     let timers = Timers
     let custodian = Custodian
     let system = System.create(timers)
+    (let fileauth, let tcpauth) = try
+        (env.root as AmbientAuth, TCPConnectAuth(env.root as AmbientAuth))
+      else
+        env.out.print("Could not obtain authority for file or tcp access")
+        return
+      end
+
     custodian(system)
 
     let filename = try env.args(1) else "idle.json" end
     let contents =
       try
-        let file = File.open(FilePath(env.root as AmbientAuth, filename))
+        let file = File.open(FilePath(fileauth, filename))
         file.read_string(file.size())
       else
         ""
@@ -51,7 +58,7 @@ actor Main
         let password = imap("password") as String
         let inbox = imap("inbox") as String
         let command = imap("command") as String
-        let idler = Idler(env, system, timers, name, host, userid, password, inbox, command)
+        let idler = Idler(env.out, tcpauth, system, timers, name, host, userid, password, inbox, command)
         idler.connect()
         custodian(idler)
         idlers.push(idler)
@@ -89,22 +96,22 @@ class QuitHandler is SignalNotify
 class ResponseBuilder is TCPConnectionNotify
   let _buffer:Reader = Reader
   let _idler:Idler
-  let _env:Env
+  let _out:OutStream
 
-  new iso create(env:Env, idler:Idler) =>
+  new iso create(out:OutStream, idler:Idler) =>
     _idler = idler
-    _env = env
+    _out = out
 
   fun ref connected(conn: TCPConnection ref) => 
-    _env.out.print("connected")
+    _out.print("connected")
     _idler.connected(conn)
 
   fun ref connect_failed(conn: TCPConnection ref) => 
-    _env.out.print("connect_failed")
+    _out.print("connect_failed")
     _idler.connect_failed()
 
   fun ref auth_failed(conn: TCPConnection ref) =>
-    _env.out.print("auth_failed")
+    _out.print("auth_failed")
     None
 
   fun ref received(conn: TCPConnection ref, data: Array[U8] iso) =>
@@ -116,11 +123,11 @@ class ResponseBuilder is TCPConnectionNotify
     end
 
   fun ref connecting(conn: TCPConnection ref, count: U32) =>
-    _env.out.print("connecting")
+    _out.print("connecting")
     None
 
   fun ref closed(conn: TCPConnection ref) =>
-    _env.out.print("closed")
+    _out.print("closed")
     _idler.closed()
     None
 
@@ -178,21 +185,23 @@ actor Idler
   let _folder:String
   let _command:String
   var _conn:(TCPConnection | None) = None
-  let _env:Env
+  let _out:OutStream
+  let _auth:TCPConnectAuth
   let _system:System
   let _timers:Timers
   var _count:U32 = 0
   var _action:Action = WaitForConnection
   var _commands:Map[U32, Action] = Map[U32, Action]
 
-  new create(env:Env,system:System,timers:Timers,account:String,server:String, user:String, password:String, folder:String, command:String) =>
+  new create(out:OutStream,auth:TCPConnectAuth,system:System,timers:Timers,account:String,server:String, user:String, password:String, folder:String, command:String) =>
     _account = account
     _server = server
     _user = user
     _password = password
     _folder = folder
     _command = command
-    _env = env
+    _out = out
+    _auth = auth
     _system = system
     _timers = timers
 
@@ -231,7 +240,7 @@ actor Idler
       let ctx = SSLContext.set_client_verify(false).set_ciphers("ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH").allow_tls_v1(true).allow_tls_v1_1(true)
       let ssl = ctx.client(_server)
 
-      _conn = TCPConnection(_env.root as AmbientAuth, SSLConnection(ResponseBuilder(_env, this), consume ssl), _server, "993".string())
+      _conn = TCPConnection(_auth, SSLConnection(ResponseBuilder(_out, this), consume ssl), _server, "993".string())
     else
       log("failed to connect")
     end
@@ -289,7 +298,7 @@ actor Idler
     if s.at("* BYE", 0) then
       try
         (_conn as TCPConnection).dispose()
-        _env.out.print("Reconnecting to " + _account)
+        log("Reconnecting to " + _account)
         connect()
       end
     end
@@ -299,7 +308,7 @@ actor Idler
 
   be on_logout() => try (_conn as TCPConnection).dispose() end
 
-  be log(s:String) => _env.out.print(_account + ": " + s)
+  be log(s:String) => _out.print(_account + ": " + s)
 
   be start_idling() =>
     log("idling started")
