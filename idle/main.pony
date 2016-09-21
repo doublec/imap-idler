@@ -249,7 +249,7 @@ actor Idler
     _action.got_line(s, this)
 
   be on_connected(s:String) =>
-    send_command(IMAPLOGIN, WaitForLogin, _user + " " + _password)
+    send_command(IMAPLOGIN, WaitForLogin, _user + " \"" + _password.clone().replace("\"", "\\\"") + "\"")
 
   be on_command(s:String) => 
     try
