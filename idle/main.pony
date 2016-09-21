@@ -1,5 +1,6 @@
 use "net"
 use "net/ssl"
+use "buffered"
 use "json"
 use "files"
 use "collections"
@@ -86,7 +87,7 @@ class QuitHandler is SignalNotify
     false
 
 class ResponseBuilder is TCPConnectionNotify
-  let _buffer:ReadBuffer = ReadBuffer
+  let _buffer:Reader = Reader
   let _idler:Idler
   let _env:Env
 
