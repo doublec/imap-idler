@@ -114,13 +114,14 @@ class ResponseBuilder is TCPConnectionNotify
     _out.print("auth_failed")
     None
 
-  fun ref received(conn: TCPConnection ref, data: Array[U8] iso) =>
+  fun ref received(conn: TCPConnection ref, data: Array[U8] iso): Bool =>
     _buffer.append(consume data)
     try
       while true do
         _idler.got_line(_buffer.line())
       end
     end
+    false
 
   fun ref connecting(conn: TCPConnection ref, count: U32) =>
     _out.print("connecting")
@@ -237,7 +238,11 @@ actor Idler
   be connect() =>
     try
       // Set ciphers and TLS to allow weaker ciphers to handle various configured IMAP servers that require it
-      let ctx = SSLContext.set_client_verify(false).set_ciphers("ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH").allow_tls_v1(true).allow_tls_v1_1(true)
+      let ctx = SSLContext
+      ctx.set_client_verify(false)
+      ctx.set_ciphers("ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH")
+      ctx.allow_tls_v1(true)
+      ctx.allow_tls_v1_1(true)
       let ssl = ctx.client(_server)
 
       _conn = TCPConnection(_auth, SSLConnection(ResponseBuilder(_out, this), consume ssl), _server, "993".string())
@@ -258,7 +263,9 @@ actor Idler
     _action.got_line(s, this)
 
   be on_connected(s:String) =>
-    send_command(IMAPLOGIN, WaitForLogin, _user + " \"" + _password.clone().replace("\"", "\\\"") + "\"")
+    let pw: String ref = _password.clone()
+    pw.replace("\"", "\\\"")
+    send_command(IMAPLOGIN, WaitForLogin, _user + " \"" + pw + "\"")
 
   be on_command(s:String) => 
     try
