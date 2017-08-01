@@ -32,10 +32,10 @@ actor Main
 
     custodian(system)
 
-    let filename = try env.args(1) else "idle.json" end
+    let filename = try env.args(1)? else "idle.json" end
     let contents =
       try
-        let file = File.open(FilePath(fileauth, filename))
+        let file = File.open(FilePath(fileauth, filename)?)
         file.read_string(file.size())
       else
         ""
@@ -45,19 +45,19 @@ actor Main
     let json: JsonDoc = JsonDoc
     try
       env.out.print("Parsing " + filename)
-      json.parse(contents)
+      json.parse(contents)?
       env.out.print("Parsed " + filename)
 
       let idlers = recover iso Array[Idler] end
       let config = json.data as JsonArray
       for entry in config.data.values() do
         let imap = (entry as JsonObject).data
-        let name = imap("name") as String
-        let host = imap("host") as String
-        let userid = imap("userid") as String
-        let password = imap("password") as String
-        let inbox = imap("inbox") as String
-        let command = imap("command") as String
+        let name = imap("name")? as String
+        let host = imap("host")? as String
+        let userid = imap("userid")? as String
+        let password = imap("password")? as String
+        let inbox = imap("inbox")? as String
+        let command = imap("command")? as String
         let idler = Idler(env.out, tcpauth, system, timers, name, host, userid, password, inbox, command)
         idler.connect()
         custodian(idler)
@@ -118,7 +118,7 @@ class ResponseBuilder is TCPConnectionNotify
     _buffer.append(consume data)
     try
       while true do
-        _idler.got_line(_buffer.line())
+        _idler.got_line(_buffer.line()?)
       end
     end
     false
@@ -240,10 +240,10 @@ actor Idler
       // Set ciphers and TLS to allow weaker ciphers to handle various configured IMAP servers that require it
       let ctx = SSLContext
       ctx.set_client_verify(false)
-      ctx.set_ciphers("ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH")
+      ctx.set_ciphers("ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH")?
       ctx.allow_tls_v1(true)
       ctx.allow_tls_v1_1(true)
-      let ssl = ctx.client(_server)
+      let ssl = ctx.client(_server)?
 
       _conn = TCPConnection(_auth, SSLConnection(ResponseBuilder(_out, this), consume ssl), _server, "993".string())
     else
@@ -269,19 +269,19 @@ actor Idler
 
   be on_command(s:String) => 
     try
-      if s(0) == '*' then
+      if s(0)? == '*' then
         on_command_untagged(s)
-      elseif s(0) == '+' then
+      elseif s(0)? == '+' then
         _action.command_continue(s, this)
       else
         try
-          let offset = s.find(" ")
-          let tagg = s.substring(0, offset).u32()
+          let offset = s.find(" ")?
+          let tagg = s.substring(0, offset).u32()?
           if s.at("OK", offset + 1) then
-            _commands(tagg).command_end(s.substring(offset + 3, 0), this)
-            _commands.remove(tagg)
+            _commands(tagg)?.command_end(s.substring(offset + 3, 0), this)
+            _commands.remove(tagg)?
           else
-            _commands(tagg).command_line(s.substring(offset + 1, 0), this)
+            _commands(tagg)?.command_line(s.substring(offset + 1, 0), this)
           end
         else
           on_command_unknown(s)
@@ -294,7 +294,7 @@ actor Idler
   be on_command_untagged(s:String) =>
     log("untagged command [" + s + "]")
     let exists:Bool = try 
-                        s.find("EXISTS")
+                        s.find("EXISTS")?
                         true
                       else
                         false
