@@ -215,7 +215,6 @@ actor Idler
     | IMAPLIST => "LIST"
     | IMAPCLOSE => "CLOSE"
     | IMAPLOGOUT => "LOGOUT"
-    else ""
     end
   
   be send_command(cmd:Command, action:Action, data:(String | None)) =>
@@ -226,7 +225,6 @@ actor Idler
     let tail:String = match data
             | (let s:String) => " " + s + "\r\n"
             | None => "\r\n"
-            else ""
             end
     let s = _count.string() + " " + c + tail
     try
